@@ -141,40 +141,13 @@ pub fn parse_char(s: &[u8]) -> Option<(&[u8], u8)> {
     }
 }
 
-/// Expect a given sequence of bytes and skip it.
 #[inline]
-pub fn expect_exact(prefix: &'static str) -> impl Fn(&[u8]) -> Option<(&[u8], ())> {
+pub fn expect_str(prefix: &'static [u8]) -> impl Fn(&[u8]) -> Option<(&[u8], ())> {
     move |s: &[u8]| {
-        if s.starts_with(prefix.as_bytes()) {
+        if s.starts_with(prefix) {
             Some((unsafe_slice(s, prefix.len()), ()))
         } else {
             None
         }
-    }
-}
-
-/// Parse a value and then apply a function to it upon success.
-#[inline]
-pub fn parse_apply<'a, T1: 'a, T2: 'a, A, P>(
-    apply_func: A,
-    parse_func: P,
-) -> impl Fn(&'a [u8]) -> Option<(&'a [u8], T2)>
-where
-    A: Fn(T1) -> T2,
-    P: Fn(&'a [u8]) -> Option<(&'a [u8], T1)>,
-{
-    move |s: &[u8]| parse_func(s).map(|(s, v)| (s, apply_func(v)))
-}
-
-/// Parse a given fixed prefix, followed by a value defined by a provided parser.
-#[inline]
-pub fn parse_pre<'a, T, F>(s: &'a [u8], prefix: &'static str, func: F) -> Option<(&'a [u8], T)>
-where
-    F: Fn(&'a [u8]) -> Option<(&'a [u8], T)>,
-{
-    if s.starts_with(prefix.as_bytes()) {
-        func(unsafe_slice(s, prefix.len()))
-    } else {
-        None
     }
 }
