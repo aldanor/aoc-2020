@@ -1,0 +1,30 @@
+[package]
+name = "aoc2020"
+version = "0.1.0"
+authors = ["Ivan Smirnov <i.s.smirnov@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+quickersort = "3.0"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+panic = "abort"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[lib]
+name = "aoc2020"
+path = "src/lib.rs"
+bench = false
+
+[[bin]]
+name = "run"
+path = "src/run.rs"
+bench = false
+
+[[bench]]
+name = "bench"
+harness = false
