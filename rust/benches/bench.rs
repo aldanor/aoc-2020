@@ -12,6 +12,9 @@ macro_rules! bench {
         $c.bench_function(concat!(stringify!($path), "::part02"), |b| {
             b.iter(|| black_box(part2(black_box(&s))))
         });
+        $c.bench_function(concat!(stringify!($path), "::input"), |b| {
+            b.iter(|| input().len())
+        });
     }};
 }
 
