@@ -1,5 +1,3 @@
-use aoc2020::day01;
-
 macro_rules! run_day {
     ($day:path) => {{
         use $day::*;
@@ -8,5 +6,7 @@ macro_rules! run_day {
 }
 
 fn main() {
+    use aoc2020::*;
     run_day!(day01);
+    run_day!(day02);
 }

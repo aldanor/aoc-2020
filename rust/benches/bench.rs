@@ -1,16 +1,23 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use aoc2020::day01;
+use aoc2020::*;
+
+macro_rules! bench {
+    ($c:expr, $path:path) => {{
+        use $path::*;
+        let s = input();
+        $c.bench_function(concat!(stringify!($path), "::part01"), |b| {
+            b.iter(|| black_box(part1(black_box(&s))))
+        });
+        $c.bench_function(concat!(stringify!($path), "::part02"), |b| {
+            b.iter(|| black_box(part2(black_box(&s))))
+        });
+    }};
+}
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("day01_1", |b| {
-        let s = day01::input();
-        b.iter(|| black_box(day01::part1(black_box(&s))))
-    });
-    c.bench_function("day01_2", |b| {
-        let s = day01::input();
-        b.iter(|| black_box(day01::part2(black_box(&s))))
-    });
+    bench!(c, day01);
+    bench!(c, day02);
 }
 
 criterion_group!(benches, criterion_benchmark);
