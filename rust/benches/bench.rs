@@ -6,10 +6,10 @@ macro_rules! bench {
     ($c:expr, $path:path) => {{
         use $path::*;
         let s = input();
-        $c.bench_function(concat!(stringify!($path), "::part01"), |b| {
+        $c.bench_function(concat!(stringify!($path), "::part1"), |b| {
             b.iter(|| black_box(part1(black_box(&s))))
         });
-        $c.bench_function(concat!(stringify!($path), "::part02"), |b| {
+        $c.bench_function(concat!(stringify!($path), "::part2"), |b| {
             b.iter(|| black_box(part2(black_box(&s))))
         });
         $c.bench_function(concat!(stringify!($path), "::input"), |b| {
@@ -21,6 +21,7 @@ macro_rules! bench {
 pub fn criterion_benchmark(c: &mut Criterion) {
     bench!(c, day01);
     bench!(c, day02);
+    bench!(c, day03);
 }
 
 criterion_group!(benches, criterion_benchmark);

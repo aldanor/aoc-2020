@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 arrayvec = "0.5"
+memchr = "2.3"
 quickersort = "3.0"
 
 [profile.release]
