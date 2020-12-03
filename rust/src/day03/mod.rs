@@ -1,3 +1,101 @@
+use std::borrow::Cow;
+
+use arrayvec::ArrayVec;
+
+const MAX_WIDTH: usize = 32;
+const MAX_DX: usize = 10;
+const MAX_DY: usize = 4;
+
+#[derive(Debug, Default, Clone)]
+struct Cycle {
+    pub len: usize,
+    pub steps: ArrayVec<[u8; MAX_WIDTH]>,
+}
+
+impl Cycle {
+    fn new(w: usize, dx: usize, dy: usize) -> Self {
+        // element `i` holds the offset to step from item `i` to item `i + 1`
+        // the number of steps is exactly `w` (it's guaranteed to cycle after
+        // that, but it may contain sub-cycles, e.g. w=10, dx=5, that's ok).
+        if w == 0 || dx == 0 || dy == 0 {
+            return Default::default();
+        }
+        let (mut x, mut prev) = (0, 0);
+        let mut steps = ArrayVec::new();
+        for i in 0..w {
+            x = (x + dx) % w;
+            let pos = (i + 1) * dy * (w + 1) + x;
+            steps.push((pos - prev) as _);
+            prev = pos;
+        }
+        Self { steps, len: prev }
+    }
+
+    #[inline]
+    fn get(w: usize, dx: usize, dy: usize) -> Cow<'static, Self> {
+        if w < MAX_WIDTH && dx < MAX_DX && dy < MAX_DY {
+            Cow::Borrowed(&BAKERY[w * MAX_DX * MAX_DY + dx * MAX_DY + dy])
+        } else {
+            Cow::Owned(Self::new(w, dx, dy))
+        }
+    }
+
+    #[inline]
+    fn eval(&self, s: &[u8]) -> u8 {
+        let n_full_cycles = s.len() / self.len;
+        let mut p = s.as_ptr();
+        let mut count = 0;
+        unsafe {
+            for _ in 0..n_full_cycles {
+                for j in 0..self.steps.len() {
+                    count += (*p == b'#') as u8;
+                    p = p.add(*self.steps.get_unchecked(j) as usize);
+                }
+            }
+            let (p_end, mut j) = (s.as_ptr().add(s.len()), 0);
+            while p < p_end && j < self.steps.len() {
+                count += (*p == b'#') as u8;
+                p = p.add(*self.steps.get_unchecked(j) as usize);
+                j += 1;
+            }
+        }
+        count
+    }
+}
+
+#[ctor::ctor]
+static BAKERY: Vec<Cycle> = {
+    let mut out = Vec::new();
+    for w in 0..MAX_WIDTH {
+        for dx in 0..MAX_DX {
+            for dy in 0..MAX_DY {
+                out.push(Cycle::new(w, dx, dy));
+            }
+        }
+    }
+    out
+};
+
+#[inline]
+pub fn input() -> &'static [u8] {
+    static INPUT: &str = include_str!("input.txt");
+    INPUT.as_bytes()
+}
+
+pub fn part1(s: &[u8]) -> u8 {
+    let w = memchr::memchr(b'\n', s).unwrap();
+    return Cycle::get(w, 3, 1).eval(s);
+}
+
+pub fn part2(s: &[u8]) -> u32 {
+    let w = memchr::memchr(b'\n', s).unwrap();
+    (Cycle::get(w, 1, 1).eval(s) as u32)
+        * (Cycle::get(w, 3, 1).eval(s) as u32)
+        * (Cycle::get(w, 5, 1).eval(s) as u32)
+        * (Cycle::get(w, 7, 1).eval(s) as u32)
+        * (Cycle::get(w, 1, 2).eval(s) as u32)
+}
+
 #[derive(Debug, Copy, Clone)]
 struct TreeCounter {
     pub dx: u8,
@@ -21,13 +119,7 @@ impl TreeCounter {
     }
 }
 
-#[inline]
-pub fn input() -> &'static [u8] {
-    static INPUT: &str = include_str!("input.txt");
-    INPUT.as_bytes()
-}
-
-pub fn part1(s: &[u8]) -> u8 {
+pub fn part1_slow(s: &[u8]) -> u8 {
     let mut c = TreeCounter::new(3, 1);
     let (mut y, mut pos) = (0, 0);
     let w = memchr::memchr(b'\n', s).unwrap();
@@ -40,7 +132,7 @@ pub fn part1(s: &[u8]) -> u8 {
     c.n
 }
 
-pub fn part2(s: &[u8]) -> u32 {
+pub fn part2_slow(s: &[u8]) -> u32 {
     let mut c0 = TreeCounter::new(1, 1);
     let mut c1 = TreeCounter::new(3, 1);
     let mut c2 = TreeCounter::new(5, 1);
