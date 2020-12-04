@@ -9,7 +9,7 @@ const MAX_DY: usize = 4;
 #[derive(Debug, Default, Clone)]
 struct Cycle {
     pub len: usize,
-    pub steps: ArrayVec<[u8; MAX_WIDTH]>,
+    pub steps: ArrayVec<[u16; MAX_WIDTH * 4]>,
 }
 
 impl Cycle {
@@ -22,10 +22,10 @@ impl Cycle {
         }
         let (mut x, mut prev) = (0, 0);
         let mut steps = ArrayVec::new();
-        for i in 0..w {
+        for i in 0..w * 4 {
             x = (x + dx) % w;
             let pos = (i + 1) * dy * (w + 1) + x;
-            steps.push((pos - prev) as _);
+            steps.push(prev as _);
             prev = pos;
         }
         Self { steps, len: prev }
@@ -43,19 +43,36 @@ impl Cycle {
     #[inline]
     fn eval(&self, s: &[u8]) -> u8 {
         let n_full_cycles = s.len() / self.len;
+
+        let f = move |k: usize| unsafe { *self.steps.get_unchecked(k) };
+        let g = |p: *const u8, i: u16| unsafe { (*p.add(i as usize) == b'#') as u8 };
+
+        const BATCH_SIZE: usize = 8;
+        let n_batches = self.steps.len() / BATCH_SIZE;
+        let rem_start = n_batches * BATCH_SIZE;
+
         let mut p = s.as_ptr();
         let mut count = 0;
         unsafe {
             for _ in 0..n_full_cycles {
-                for j in 0..self.steps.len() {
-                    count += (*p == b'#') as u8;
-                    p = p.add(*self.steps.get_unchecked(j) as usize);
+                let mut k = 0;
+                for _ in 0..n_batches {
+                    let (i0, i1, i2, i3) = (f(k + 0), f(k + 1), f(k + 2), f(k + 3));
+                    let (i4, i5, i6, i7) = (f(k + 4), f(k + 5), f(k + 6), f(k + 7));
+                    let (c0, c1, c2, c3) = (g(p, i0), g(p, i1), g(p, i2), g(p, i3));
+                    let (c4, c5, c6, c7) = (g(p, i4), g(p, i5), g(p, i6), g(p, i7));
+                    count += c0 + c1 + c2 + c3;
+                    count += c4 + c5 + c6 + c7;
+                    k += BATCH_SIZE;
                 }
+                for j in rem_start..self.steps.len() {
+                    count += g(p, f(j));
+                }
+                p = p.add(self.len);
             }
             let (p_end, mut j) = (s.as_ptr().add(s.len()), 0);
             while p < p_end && j < self.steps.len() {
-                count += (*p == b'#') as u8;
-                p = p.add(*self.steps.get_unchecked(j) as usize);
+                count += g(p, f(j));
                 j += 1;
             }
         }
