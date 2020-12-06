@@ -4,3 +4,4 @@
 - Day 02: Bash
 - Day 04: Regex
 - Day 05: Haskell
+- Day 06: Racket
