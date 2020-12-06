@@ -9,9 +9,10 @@ pub fn part1(s: &[u8]) -> u16 {
     let mut group = 0u32;
     let mut sum = 0;
     for &c in s {
-        if c != b'\n' {
-            group |= 1u32 << (c - b'a');
-        } else if prev == b'\n' {
+        let c = c.wrapping_sub(b'\n');
+        if c != 0 {
+            group |= 1u32 << c.wrapping_sub(b'a' - b'\n');
+        } else if prev == 0 {
             sum += group.count_ones() as u16;
             group = 0;
         }
@@ -26,14 +27,11 @@ pub fn part2(s: &[u8]) -> u16 {
     let mut group = u32::MAX;
     let mut sum = 0;
     for &c in s {
-        if c != b'\n' {
-            person |= 1u32 << (c - b'a');
-        } else if prev != b'\n' {
-            group = if group == u32::MAX {
-                person
-            } else {
-                group & person
-            };
+        let c = c.wrapping_sub(b'\n');
+        if c != 0 {
+            person |= 1u32 << c.wrapping_sub(b'a' - b'\n');
+        } else if prev != 0 {
+            group &= person;
             person = 0;
         } else {
             sum += group.count_ones() as u16;
