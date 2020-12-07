@@ -155,20 +155,26 @@ impl Graph {
     }
 
     #[inline]
+    unsafe fn get_row(&mut self, row: Id) -> *mut Id {
+        (*self.graph.as_mut_ptr())
+            .as_mut_ptr()
+            .add((row as usize) * C)
+    }
+
+    #[inline]
     unsafe fn add_node(&mut self, src: Id, dst: Id, n: u16) {
         match self.mode {
             Mode::CountParents => {
-                let row = (*self.graph.as_mut_ptr().add(dst as _)).as_mut_ptr();
-                let offset = 1 + (*row as usize);
-                *row.add(offset) = src;
+                let row = self.get_row(dst);
                 *row += 1;
+                *row.add(*row as usize) = src;
             }
             Mode::CountChildren => {
-                let row = (*self.graph.as_mut_ptr().add(src as _)).as_mut_ptr();
+                let row = self.get_row(src);
                 let offset = 1 + 2 * (*row as usize);
+                *row += 1;
                 *row.add(offset) = dst;
                 *row.add(offset + 1) = n;
-                *row += 1;
             }
         }
     }
