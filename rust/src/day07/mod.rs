@@ -1,34 +1,48 @@
 use std::hint::unreachable_unchecked;
 
-trait UnwrapUnchecked<T> {
-    fn unwrap_unchecked(self) -> T;
+use memchr::memchr;
+
+trait ByteSliceExt {
+    fn get_u16(&self) -> u16;
+    fn skip_past(&self, c: u8, i: usize) -> &Self;
+    fn get_digit(&self) -> u8;
+    fn check_first(&self, c: u8) -> bool;
 }
 
-impl<T> UnwrapUnchecked<T> for Option<T> {
+impl ByteSliceExt for [u8] {
     #[inline]
-    fn unwrap_unchecked(self) -> T {
-        self.unwrap_or_else(|| unsafe { unreachable_unchecked() })
+    fn get_u16(&self) -> u16 {
+        let mut a = [0; 2];
+        a.copy_from_slice(&self[..2]);
+        u16::from_ne_bytes(a)
+    }
+
+    fn skip_past(&self, c: u8, i: usize) -> &Self {
+        &self[1 + i + memchr(c, self).unwrap_or_else(|| unsafe { unreachable_unchecked() })..]
+    }
+
+    fn get_digit(&self) -> u8 {
+        unsafe { (*self.as_ptr()).wrapping_sub(b'0') }
+    }
+
+    fn check_first(&self, c: u8) -> bool {
+        unsafe { *self.as_ptr() == c }
     }
 }
 
-#[inline]
-pub fn input() -> &'static [u8] {
-    static INPUT: &[u8] = include_bytes!("input.txt");
-    INPUT
-}
+const N_COLUMNS: usize = 32;
+const N_ROWS: usize = 1024;
 
-const C: usize = 32;
-const R: usize = 1024;
 type Id = u16;
-type G = [[Id; C]; R];
+type GraphMatrix = [[Id; N_COLUMNS]; N_ROWS];
 
 #[derive(Debug)]
-struct Table2 {
+struct Lookup2 {
     map: [u8; 1 << 16],
     count: u8,
 }
 
-impl Table2 {
+impl Lookup2 {
     pub fn new() -> Self {
         Self {
             map: [0xff; 1 << 16],
@@ -50,16 +64,16 @@ impl Table2 {
 }
 
 #[derive(Debug)]
-pub struct Table6 {
-    tables: [Table2; 3],
+pub struct Lookup6 {
+    tables: [Lookup2; 3],
     master: [Id; 1 << 15],
     count: Id,
 }
 
-impl Table6 {
+impl Lookup6 {
     pub fn new() -> Self {
         Self {
-            tables: [Table2::new(), Table2::new(), Table2::new()],
+            tables: [Lookup2::new(), Lookup2::new(), Lookup2::new()],
             master: [Id::MAX; 1 << 15],
             count: 0,
         }
@@ -90,67 +104,61 @@ pub enum Mode {
 
 #[derive(Debug)]
 pub struct Graph {
-    graph: G,
+    graph: GraphMatrix,
     mode: Mode,
-    table: Table6,
+    table: Lookup6,
 }
 
 impl Graph {
     pub fn new(mode: Mode) -> Self {
-        let graph = [[0; C]; R];
-        let table = Table6::new();
+        let graph = [[0; N_COLUMNS]; N_ROWS];
+        let table = Lookup6::new();
         Self { graph, mode, table }
     }
 
     #[inline]
-    pub fn encode_id_str(&mut self, adj: &str, col: &str) -> Id {
-        assert!(adj.len() >= 4 && col.len() >= 4);
-        unsafe { self.encode_id_ptr(adj.as_ptr(), col.as_ptr()) }
-    }
-
-    #[inline]
-    pub unsafe fn encode_id_ptr(&mut self, adj: *const u8, col: *const u8) -> Id {
-        let b0 = u16::from_ne_bytes(*adj.cast());
-        let b1 = u16::from_ne_bytes(*col.cast());
-        let b2 = u16::from_ne_bytes(*col.add(2).cast());
+    pub fn encode_id(&mut self, adj: &[u8], col: &[u8]) -> Id {
+        let b0 = adj.get_u16();
+        let b1 = col.get_u16();
+        let b2 = col[2..].get_u16();
         self.table.get(b0, b1, b2) as _
     }
 
     #[inline]
-    pub fn parse_input(&mut self, s: &[u8]) {
-        unsafe {
-            let mut ptr = s.as_ptr();
-            let end = ptr.add(s.len() - 1);
-            while ptr < end {
-                ptr = self.parse_line(ptr);
-            }
-        };
+    fn parse_id<'a>(&mut self, s: &'a [u8], i: usize) -> (&'a [u8], Id) {
+        let adj = s;
+        let col = s.skip_past(b' ', 0);
+        let id = self.encode_id(adj, col);
+        let s = col.skip_past(b' ', i);
+        (s, id)
     }
 
     #[inline]
-    unsafe fn parse_line(&mut self, mut p: *const u8) -> *const u8 {
-        let skip_past = |p: *const u8, c: u8| {
-            p.add(memchr::memchr(c, std::slice::from_raw_parts(p, 256)).unwrap_unchecked() + 1)
-        };
-        let p_adj = p;
-        p = skip_past(p, b' ');
-        let src = self.encode_id_ptr(p_adj, p);
-        p = skip_past(p, b' ').add(13);
-        if *p == b'n' {
-            return skip_past(p, b'.').add(1);
+    fn parse_line<'a>(&mut self, s: &'a [u8]) -> &'a [u8] {
+        let (s, src) = self.parse_id(s, 13);
+        if s.check_first(b'n') {
+            return s.skip_past(b'.', 1);
         }
+        let mut p = s;
+        let row = unsafe { self.get_row(src) };
         loop {
-            let n = (*p - b'0') as u16;
-            p = p.add(2);
-            let p_adj = p;
-            p = skip_past(p, b' ');
-            let dst = self.encode_id_ptr(p_adj, p);
-            self.add_node(src, dst, n);
-            p = skip_past(p, b' ').add(3 + ((n != 1) as usize));
-            if *p == b'.' {
-                return p.add(2);
+            let n = p.get_digit() as u16;
+            let (s, dst) = self.parse_id(&p[2..], 3 + ((n != 1) as usize));
+            match self.mode {
+                Mode::CountParents => unsafe { self.add_node_parents(src, dst) },
+                Mode::CountChildren => unsafe { self.add_node_children(row, dst, n) },
             }
-            p = p.add(2);
+            p = &s[2..];
+            if s.check_first(b'.') {
+                return p;
+            }
+        }
+    }
+
+    #[inline]
+    pub fn parse_input(&mut self, mut s: &[u8]) {
+        while s.len() > 1 {
+            s = self.parse_line(s);
         }
     }
 
@@ -158,29 +166,26 @@ impl Graph {
     unsafe fn get_row(&mut self, row: Id) -> *mut Id {
         (*self.graph.as_mut_ptr())
             .as_mut_ptr()
-            .add((row as usize) * C)
+            .add((row as usize) * N_COLUMNS)
     }
 
     #[inline]
-    unsafe fn add_node(&mut self, src: Id, dst: Id, n: u16) {
-        match self.mode {
-            Mode::CountParents => {
-                let row = self.get_row(dst);
-                *row += 1;
-                *row.add(*row as usize) = src;
-            }
-            Mode::CountChildren => {
-                let row = self.get_row(src);
-                let offset = 1 + 2 * (*row as usize);
-                *row += 1;
-                *row.add(offset) = dst;
-                *row.add(offset + 1) = n;
-            }
-        }
+    unsafe fn add_node_parents(&mut self, src: Id, dst: Id) {
+        let row = self.get_row(dst);
+        *row += 1;
+        *row.add(*row as usize) = src;
     }
 
     #[inline]
-    fn count_parents(&self, target: Id, found: &mut [u8; R]) {
+    unsafe fn add_node_children(&mut self, row: *mut Id, dst: Id, n: Id) {
+        let offset = 1 + 2 * (*row as usize);
+        *row += 1;
+        *row.add(offset) = dst;
+        *row.add(offset + 1) = n;
+    }
+
+    #[inline]
+    fn count_parents(&self, target: Id, found: &mut [u8; N_ROWS]) {
         let target = target as usize;
         let row = &self.graph[target];
         let len = row[0] as usize;
@@ -208,7 +213,7 @@ impl Graph {
     pub fn count(&self, target: Id) -> u32 {
         match self.mode {
             Mode::CountParents => {
-                let mut found = [0; R];
+                let mut found = [0; N_ROWS];
                 self.count_parents(target, &mut found);
                 (found.iter().map(|&x| x as u16).sum::<u16>() - 1) as _
             }
@@ -217,16 +222,24 @@ impl Graph {
     }
 }
 
+#[inline]
+pub fn input() -> &'static [u8] {
+    static INPUT: &[u8] = include_bytes!("input.txt");
+    INPUT
+}
+
+#[inline]
 pub fn part1(s: &[u8]) -> u32 {
     let mut g = Graph::new(Mode::CountParents);
     g.parse_input(s);
-    let target = g.encode_id_str("shiny", "gold");
+    let target = g.encode_id(b"shiny", b"gold");
     g.count(target)
 }
 
+#[inline]
 pub fn part2(s: &[u8]) -> u32 {
     let mut g = Graph::new(Mode::CountChildren);
     g.parse_input(s);
-    let target = g.encode_id_str("shiny", "gold");
+    let target = g.encode_id(b"shiny", b"gold");
     g.count(target)
 }
