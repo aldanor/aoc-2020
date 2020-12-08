@@ -1,15 +1,11 @@
-#[inline]
-pub fn input() -> &'static [u8] {
-    static INPUT: &str = include_str!("input.txt");
-    INPUT.as_bytes()
-}
+use crate::utils::ByteSliceExt;
 
 #[inline(always)]
-unsafe fn mangle(s: &[u8]) -> u64 {
-    let mut hi = u64::from_be_bytes(*s.as_ptr().cast());
+fn mangle(s: &[u8]) -> u64 {
+    let mut hi = unsafe { u64::from_be_bytes(*s.as_ptr().cast()) };
     let last = &mut hi as *mut _ as *mut u8; // le/x86
-    let lo1 = s.get_unchecked(8);
-    let lo2 = s.get_unchecked(9);
+    let lo1 = s.get_at(8);
+    let lo2 = s.get_at(9);
     /*
     Byte codes for L and R are 76 and 82 respectively. Since we're searching
     for minimum, we need to flip it which we'll do by xoring with 0xff at the end.
@@ -30,14 +26,14 @@ unsafe fn mangle(s: &[u8]) -> u64 {
         'RRR': 247,
     }
      */
-    *last = ((*last << 1) | lo1 | (lo2 >> 4)) ^ 0xff;
+    unsafe { *last = ((*last << 1) | lo1 | (lo2 >> 4)) ^ 0xff };
     hi
 }
 
 #[inline]
-unsafe fn unmangle(m: u64) -> u16 {
+fn unmangle(m: u64) -> u16 {
     let mut a: [u8; 10] = Default::default();
-    *a.as_mut_ptr().cast() = m.to_be_bytes();
+    unsafe { *a.as_mut_ptr().cast() = m.to_be_bytes() };
     let lo = match a[7] ^ 0xff {
         220 => b"LLL",
         221 => b"LLR",
@@ -55,30 +51,22 @@ unsafe fn unmangle(m: u64) -> u16 {
 }
 
 #[inline]
-unsafe fn decode(s: &[u8]) -> u16 {
+fn decode(s: &[u8]) -> u16 {
     // stagger the loads
-    let v0 = ((*s.get_unchecked(0) == b'B') as u16) << 9;
-    let v1 = ((*s.get_unchecked(1) == b'B') as u16) << 8;
-    let v2 = ((*s.get_unchecked(2) == b'B') as u16) << 7;
-    let v3 = ((*s.get_unchecked(3) == b'B') as u16) << 6;
+    let v0 = ((s.get_at(0) == b'B') as u16) << 9;
+    let v1 = ((s.get_at(1) == b'B') as u16) << 8;
+    let v2 = ((s.get_at(2) == b'B') as u16) << 7;
+    let v3 = ((s.get_at(3) == b'B') as u16) << 6;
     let x0 = v0 | v1 | v2 | v3;
-    let v4 = ((*s.get_unchecked(4) == b'B') as u16) << 5;
-    let v5 = ((*s.get_unchecked(5) == b'B') as u16) << 4;
-    let v6 = ((*s.get_unchecked(6) == b'B') as u16) << 3;
+    let v4 = ((s.get_at(4) == b'B') as u16) << 5;
+    let v5 = ((s.get_at(5) == b'B') as u16) << 4;
+    let v6 = ((s.get_at(6) == b'B') as u16) << 3;
     let x1 = v4 | v5 | v6;
-    let v7 = ((*s.get_unchecked(7) == b'R') as u16) << 2;
-    let v8 = ((*s.get_unchecked(8) == b'R') as u16) << 1;
-    let v9 = ((*s.get_unchecked(9) == b'R') as u16) << 0;
+    let v7 = ((s.get_at(7) == b'R') as u16) << 2;
+    let v8 = ((s.get_at(8) == b'R') as u16) << 1;
+    let v9 = ((s.get_at(9) == b'R') as u16) << 0;
     let x2 = v7 | v8 | v9;
     x0 | x1 | x2
-}
-
-pub fn part1(s: &[u8]) -> u16 {
-    let r = s
-        .chunks(11)
-        .take(s.len() / 11)
-        .fold(u64::MAX, |m, s| m.min(unsafe { mangle(s) }));
-    unsafe { unmangle(r) }
 }
 
 #[inline]
@@ -134,15 +122,30 @@ fn xor_cum(k: usize) -> u64 {
     return u64::from_be_bytes(a);
 }
 
+#[inline]
+pub fn input() -> &'static [u8] {
+    include_bytes!("input.txt")
+}
+
+#[inline]
+pub fn part1(s: &[u8]) -> u16 {
+    let r = s
+        .chunks(11)
+        .take(s.len() / 11)
+        .fold(u64::MAX, |m, s| m.min(mangle(s)));
+    unmangle(r)
+}
+
+#[inline]
 pub fn part2(s: &[u8]) -> u16 {
     let (a, b, x) =
         s.chunks(11)
             .take(s.len() / 11)
             .fold((u64::MIN, u64::MAX, 0), |(a, b, x), s| {
-                let m = unsafe { mangle(s) };
+                let m = mangle(s);
                 (a.max(m), b.min(m), x ^ m)
             });
-    let (a, b) = unsafe { (unmangle(a), unmangle(b)) };
+    let (a, b) = (unmangle(a), unmangle(b));
     let (xa, xb) = (xor_cum((a - 1) as _), xor_cum(b as _));
-    unsafe { unmangle(xa ^ xb ^ x) }
+    unmangle(xa ^ xb ^ x)
 }
