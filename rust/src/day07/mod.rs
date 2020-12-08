@@ -1,34 +1,4 @@
-use std::hint::unreachable_unchecked;
-
-use memchr::memchr;
-
-trait ByteSliceExt {
-    fn get_u16(&self) -> u16;
-    fn skip_past(&self, c: u8, i: usize) -> &Self;
-    fn get_digit(&self) -> u8;
-    fn check_first(&self, c: u8) -> bool;
-}
-
-impl ByteSliceExt for [u8] {
-    #[inline]
-    fn get_u16(&self) -> u16 {
-        let mut a = [0; 2];
-        a.copy_from_slice(&self[..2]);
-        u16::from_ne_bytes(a)
-    }
-
-    fn skip_past(&self, c: u8, i: usize) -> &Self {
-        &self[1 + i + memchr(c, self).unwrap_or_else(|| unsafe { unreachable_unchecked() })..]
-    }
-
-    fn get_digit(&self) -> u8 {
-        unsafe { (*self.as_ptr()).wrapping_sub(b'0') }
-    }
-
-    fn check_first(&self, c: u8) -> bool {
-        unsafe { *self.as_ptr() == c }
-    }
-}
+use crate::utils::ByteSliceExt;
 
 const N_COLUMNS: usize = 32;
 const N_ROWS: usize = 1024;
