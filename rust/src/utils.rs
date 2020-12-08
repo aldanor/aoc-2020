@@ -11,6 +11,12 @@ pub trait ByteSliceExt {
     fn get_first(&self) -> u8;
     fn advance(&self, n: usize) -> &Self;
     fn memchr(&self, c: u8) -> usize;
+    fn get_at(&self, i: usize) -> u8;
+
+    #[inline]
+    fn get_digit_at(&self, i: usize) -> u8 {
+        self.get_at(i).wrapping_sub(b'0')
+    }
 }
 
 impl ByteSliceExt for [u8] {
@@ -49,5 +55,10 @@ impl ByteSliceExt for [u8] {
     #[inline]
     fn memchr(&self, c: u8) -> usize {
         memchr::memchr(c, self).unwrap_or_else(|| unsafe { unreachable_unchecked() })
+    }
+
+    #[inline]
+    fn get_at(&self, i: usize) -> u8 {
+        unsafe { *self.get_unchecked(i) }
     }
 }
