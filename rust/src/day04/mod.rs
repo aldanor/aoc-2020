@@ -1,6 +1,6 @@
 use memchr::Memchr2;
 
-use crate::utils::ByteSliceExt;
+use crate::utils::*;
 
 #[inline]
 fn check_year(s: &[u8], lo: u16, hi: u16) -> bool {
@@ -95,4 +95,14 @@ pub fn part2(s: &[u8]) -> u16 {
         prev = pos + 1;
     }
     valid_passports
+}
+
+#[test]
+fn test_day04_part1() {
+    assert_eq!(part1(input()), 230);
+}
+
+#[test]
+fn test_day04_part2() {
+    assert_eq!(part2(input()), 156);
 }

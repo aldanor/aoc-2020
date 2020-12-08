@@ -1,4 +1,4 @@
-use crate::utils::ByteSliceExt;
+use crate::utils::*;
 
 const N_COLUMNS: usize = 32;
 const N_ROWS: usize = 1024;
@@ -88,9 +88,9 @@ impl Graph {
 
     #[inline]
     pub fn encode_id(&mut self, adj: &[u8], col: &[u8]) -> Id {
-        let b0 = adj.get_u16();
-        let b1 = col.get_u16();
-        let b2 = col[2..].get_u16();
+        let b0 = adj.get_u16_ne();
+        let b1 = col.get_u16_ne();
+        let b2 = col[2..].get_u16_ne();
         self.table.get(b0, b1, b2) as _
     }
 
@@ -106,7 +106,7 @@ impl Graph {
     #[inline]
     fn parse_line<'a>(&mut self, s: &'a [u8]) -> &'a [u8] {
         let (s, src) = self.parse_id(s, 13);
-        if s.check_first(b'n') {
+        if s.get_first() == b'n' {
             return s.skip_past(b'.', 1);
         }
         let mut p = s;
@@ -119,7 +119,7 @@ impl Graph {
                 Mode::CountChildren => unsafe { self.add_node_children(row, dst, n) },
             }
             p = &s[2..];
-            if s.check_first(b'.') {
+            if s.get_first() == b'.' {
                 return p;
             }
         }
@@ -194,8 +194,7 @@ impl Graph {
 
 #[inline]
 pub fn input() -> &'static [u8] {
-    static INPUT: &[u8] = include_bytes!("input.txt");
-    INPUT
+    include_bytes!("input.txt")
 }
 
 #[inline]
@@ -212,4 +211,14 @@ pub fn part2(s: &[u8]) -> u32 {
     g.parse_input(s);
     let target = g.encode_id(b"shiny", b"gold");
     g.count(target)
+}
+
+#[test]
+fn test_day07_part1() {
+    assert_eq!(part1(input()), 179);
+}
+
+#[test]
+fn test_day07_part2() {
+    assert_eq!(part2(input()), 18925);
 }

@@ -1,4 +1,4 @@
-use crate::utils::ByteSliceExt;
+use crate::utils::*;
 
 #[inline(always)]
 fn mangle(s: &[u8]) -> u64 {
@@ -148,4 +148,14 @@ pub fn part2(s: &[u8]) -> u16 {
     let (a, b) = (unmangle(a), unmangle(b));
     let (xa, xb) = (xor_cum((a - 1) as _), xor_cum(b as _));
     unmangle(xa ^ xb ^ x)
+}
+
+#[test]
+fn test_day05_part1() {
+    assert_eq!(part1(input()), 813);
+}
+
+#[test]
+fn test_day05_part2() {
+    assert_eq!(part2(input()), 612);
 }

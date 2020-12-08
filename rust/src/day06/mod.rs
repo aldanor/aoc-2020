@@ -1,9 +1,9 @@
 #[inline]
 pub fn input() -> &'static [u8] {
-    static INPUT: &[u8] = include_bytes!("input.txt");
-    INPUT
+    include_bytes!("input.txt")
 }
 
+#[inline]
 pub fn part1(s: &[u8]) -> u16 {
     let mut prev = b'\n';
     let mut group = 0u32;
@@ -21,6 +21,7 @@ pub fn part1(s: &[u8]) -> u16 {
     sum
 }
 
+#[inline]
 pub fn part2(s: &[u8]) -> u16 {
     let mut prev = b' ';
     let mut person = 0;
@@ -41,4 +42,14 @@ pub fn part2(s: &[u8]) -> u16 {
         prev = c;
     }
     sum
+}
+
+#[test]
+fn test_day06_part1() {
+    assert_eq!(part1(input()), 7120);
+}
+
+#[test]
+fn test_day06_part2() {
+    assert_eq!(part2(input()), 3570);
 }

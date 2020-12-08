@@ -71,3 +71,13 @@ pub fn part2(s: &[i16]) -> u32 {
     }
     0
 }
+
+#[test]
+fn test_day01_part1() {
+    assert_eq!(part1(&input()), 974304);
+}
+
+#[test]
+fn test_day01_part2() {
+    assert_eq!(part2(&input()), 236430480);
+}

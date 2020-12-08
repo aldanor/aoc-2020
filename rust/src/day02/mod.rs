@@ -74,3 +74,13 @@ pub fn part2(mut s: &[u8]) -> u16 {
     }
     valid
 }
+
+#[test]
+fn test_day02_part1() {
+    assert_eq!(part1(input()), 477);
+}
+
+#[test]
+fn test_day02_part2() {
+    assert_eq!(part2(input()), 686);
+}

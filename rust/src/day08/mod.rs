@@ -1,4 +1,4 @@
-use crate::utils::ByteSliceExt;
+use crate::utils::*;
 
 #[derive(Debug, Copy, Clone)]
 #[repr(u8)]
@@ -178,8 +178,7 @@ impl Runner {
 
 #[inline]
 pub fn input() -> &'static [u8] {
-    static INPUT: &[u8] = include_bytes!("input.txt");
-    INPUT
+    include_bytes!("input.txt")
 }
 
 #[inline]
@@ -190,4 +189,14 @@ pub fn part1(s: &[u8]) -> i16 {
 #[inline]
 pub fn part2(s: &[u8]) -> i16 {
     Runner::from_input(s).find_bug_and_execute()
+}
+
+#[test]
+fn test_day08_part1() {
+    assert_eq!(part1(input()), 2058);
+}
+
+#[test]
+fn test_day08_part2() {
+    assert_eq!(part2(input()), 1000);
 }

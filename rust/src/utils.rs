@@ -3,34 +3,34 @@ use std::slice;
 
 use memchr::memchr;
 
-pub trait ByteSliceExt {
-    fn get_u16(&self) -> u16;
-    fn skip_past(&self, c: u8, i: usize) -> &Self;
-    fn get_digit(&self) -> u8;
-    fn check_first(&self, c: u8) -> bool;
-    fn get_first(&self) -> u8;
+pub trait SliceExt<T>
+where
+    T: Copy,
+{
+    fn get_at(&self, i: usize) -> T;
     fn advance(&self, n: usize) -> &Self;
-    fn memchr(&self, c: u8) -> usize;
-    fn get_at(&self, i: usize) -> u8;
 
     #[inline]
-    fn get_digit_at(&self, i: usize) -> u8 {
-        self.get_at(i).wrapping_sub(b'0')
+    fn get_first(&self) -> T {
+        self.get_at(0)
     }
 }
 
-impl ByteSliceExt for [u8] {
+impl<T: Copy + PartialEq> SliceExt<T> for [T] {
     #[inline]
-    fn get_u16(&self) -> u16 {
-        let mut a = [0; 2];
-        a.copy_from_slice(&self[..2]);
-        u16::from_ne_bytes(a)
+    fn get_at(&self, i: usize) -> T {
+        unsafe { *self.get_unchecked(i) }
     }
 
     #[inline]
-    fn skip_past(&self, c: u8, i: usize) -> &Self {
-        &self[1 + i + memchr(c, self).unwrap_or_else(|| unsafe { unreachable_unchecked() })..]
+    fn advance(&self, n: usize) -> &Self {
+        unsafe { slice::from_raw_parts(self.as_ptr().add(n), self.len() - n) }
     }
+}
+
+pub trait ByteSliceExt: SliceExt<u8> {
+    fn memchr(&self, c: u8) -> usize;
+    fn get_u16_ne(&self) -> u16;
 
     #[inline]
     fn get_digit(&self) -> u8 {
@@ -38,27 +38,26 @@ impl ByteSliceExt for [u8] {
     }
 
     #[inline]
-    fn check_first(&self, c: u8) -> bool {
-        self.get_first() == c
+    fn get_digit_at(&self, i: usize) -> u8 {
+        self.get_at(i).wrapping_sub(b'0')
     }
 
     #[inline]
-    fn get_first(&self) -> u8 {
-        unsafe { *self.as_ptr() }
+    fn skip_past(&self, c: u8, i: usize) -> &Self {
+        self.advance(1 + i + self.memchr(c))
     }
+}
 
-    #[inline]
-    fn advance(&self, n: usize) -> &Self {
-        unsafe { slice::from_raw_parts(self.as_ptr().add(n), self.len() - n) }
-    }
-
+impl ByteSliceExt for [u8] {
     #[inline]
     fn memchr(&self, c: u8) -> usize {
-        memchr::memchr(c, self).unwrap_or_else(|| unsafe { unreachable_unchecked() })
+        memchr(c, self).unwrap_or_else(|| unsafe { unreachable_unchecked() })
     }
 
     #[inline]
-    fn get_at(&self, i: usize) -> u8 {
-        unsafe { *self.get_unchecked(i) }
+    fn get_u16_ne(&self) -> u16 {
+        let mut a = [0; 2];
+        a.copy_from_slice(&self[..2]);
+        u16::from_ne_bytes(a)
     }
 }
