@@ -101,6 +101,9 @@ pub const MAX_CMDS: usize = 1024;
 
 const NULL: i16 = i16::MIN;
 
+#[derive(Debug, Clone, Copy)]
+pub enum CellState {}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Runner {
     cmds: [Cmd; MAX_CMDS],
@@ -118,7 +121,7 @@ impl Runner {
         Self { cmds, n_cmds }
     }
 
-    pub fn execute(&mut self) -> i16 {
+    pub fn execute(&self) -> i16 {
         let (mut pos, mut acc) = (0, 0);
         let mut visited = [false; MAX_CMDS];
         loop {
@@ -131,43 +134,40 @@ impl Runner {
         }
     }
 
-    pub fn find_bug(&self) -> i16 {
-        let mut state = [0; MAX_CMDS];
-        self.traverse_and_flip(0, 0, NULL, &mut state)
+    #[inline]
+    pub fn find_bug_and_execute(&self) -> i16 {
+        let mut seen = [false; MAX_CMDS];
+        self.traverse_and_flip(0, 0, false, &mut seen)
     }
 
+    #[inline]
     fn traverse_and_flip(
         &self,
         pos: Pos,
         acc: i16,
-        flipped: i16,
-        state: &mut [i16; MAX_CMDS],
+        flipped: bool,
+        seen: &mut [bool; MAX_CMDS],
     ) -> i16 {
-        const PENDING: i16 = i16::MAX;
         let i = pos as usize;
-        if pos < 0 || pos > (self.n_cmds as Pos) {
+        if pos < 0 || unsafe { *seen.get_unchecked(i) } {
             return NULL;
-        } else if pos == (self.n_cmds as Pos) {
+        } else if pos >= (self.n_cmds as Pos) {
             return acc;
-        } else if state[i] == NULL || state[i] == PENDING {
-            return NULL;
         }
+        unsafe { *seen.get_unchecked_mut(i as usize) = true };
         let cmd = unsafe { *self.cmds.get_unchecked(pos as usize) };
         {
-            state[i] = PENDING;
             let (mut pos, mut acc) = (pos, acc);
             cmd.execute(&mut pos, &mut acc);
-            let acc = self.traverse_and_flip(pos, acc, flipped, state);
+            let acc = self.traverse_and_flip(pos, acc, flipped, seen);
             if acc != NULL {
                 return acc;
-            } else {
-                state[i] = NULL;
             }
         }
-        if flipped == NULL {
+        if !flipped {
             let (mut pos, mut acc) = (pos, acc);
             cmd.invert().execute(&mut pos, &mut acc);
-            let acc = self.traverse_and_flip(pos, acc, 1, state);
+            let acc = self.traverse_and_flip(pos, acc, true, seen);
             if acc != NULL {
                 return acc;
             }
@@ -189,5 +189,5 @@ pub fn part1(s: &[u8]) -> i16 {
 
 #[inline]
 pub fn part2(s: &[u8]) -> i16 {
-    Runner::from_input(s).find_bug()
+    Runner::from_input(s).find_bug_and_execute()
 }
