@@ -1,5 +1,5 @@
-use std::hint::unreachable_unchecked;
-use std::slice;
+use core::hint::unreachable_unchecked;
+use core::slice;
 
 use memchr::memchr;
 
