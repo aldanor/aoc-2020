@@ -10,6 +10,7 @@ pub trait ByteSliceExt {
     fn check_first(&self, c: u8) -> bool;
     fn get_first(&self) -> u8;
     fn advance(&self, n: usize) -> &Self;
+    fn memchr(&self, c: u8) -> usize;
 }
 
 impl ByteSliceExt for [u8] {
@@ -43,5 +44,10 @@ impl ByteSliceExt for [u8] {
     #[inline]
     fn advance(&self, n: usize) -> &Self {
         unsafe { slice::from_raw_parts(self.as_ptr().add(n), self.len() - n) }
+    }
+
+    #[inline]
+    fn memchr(&self, c: u8) -> usize {
+        memchr::memchr(c, self).unwrap_or_else(|| unsafe { unreachable_unchecked() })
     }
 }
