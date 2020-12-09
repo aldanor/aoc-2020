@@ -1,24 +1,6 @@
-pub fn input() -> Vec<i16> {
-    include_str!("input.txt")
-        .trim()
-        .lines()
-        .map(|l| l.parse().unwrap())
-        .collect()
-}
+use arrayvec::ArrayVec;
 
-pub fn part1(s: &[i16]) -> u32 {
-    let mut arr = [0i16; 4096];
-    for &x in s {
-        let x = x.min(2020) as usize;
-        let rem = 2020 - x;
-        unsafe { *arr.get_unchecked_mut(rem) = x as i16 };
-        let y = unsafe { *arr.get_unchecked(x) };
-        if y != 0 {
-            return (x as u32) * (y as u32);
-        }
-    }
-    0
-}
+use crate::utils::*;
 
 #[inline]
 fn find_sum_min2(s: &[i16]) -> i16 {
@@ -39,32 +21,65 @@ fn find_sum_min2(s: &[i16]) -> i16 {
     a + b
 }
 
-pub fn part2(s: &[i16]) -> u32 {
-    let max = 2020 - find_sum_min2(s);
-    let mut arr = Vec::with_capacity(s.len());
-    for x in s {
-        if *x <= max {
-            arr.push(*x);
+#[inline]
+pub fn parse_input(mut s: &[u8]) -> ArrayVec<[i16; 256]> {
+    let mut vec = ArrayVec::new();
+    while s.len() > 1 {
+        let v = parse_int_fast(&mut s, 1, 4);
+        unsafe { vec.push_unchecked(v) };
+    }
+    vec
+}
+
+#[inline]
+pub fn input() -> &'static [u8] {
+    include_bytes!("input.txt")
+}
+
+#[inline]
+pub fn part1(s: &[u8]) -> u32 {
+    let s = parse_input(s);
+    let mut arr = [0i16; 4096];
+    for &x in &s {
+        let x = x.min(2020) as usize;
+        let rem = 2020 - x;
+        arr.set_at(rem, x as _);
+        let y = arr.get_at(x);
+        if y != 0 {
+            return (x as u32) * (y as u32);
+        }
+    }
+    0
+}
+
+#[inline]
+pub fn part2(s: &[u8]) -> u32 {
+    let s = parse_input(s);
+    let max = 2020 - find_sum_min2(&s);
+    let mut arr = ArrayVec::<[i16; 256]>::new();
+    for &x in &s {
+        if x <= max {
+            unsafe { arr.push_unchecked(x) };
         }
     }
     quickersort::sort(&mut arr);
     let n = arr.len();
 
     for i in 0..n - 2 {
-        let ai = unsafe { *arr.get_unchecked(i) };
-        let ai_rem = ai - 2020;
+        let a_i = arr.get_at(i);
+        let ai_rem = a_i - 2020;
         for j in i + 1..n - 1 {
-            let aj = unsafe { *arr.get_unchecked(j) };
-            let aij = ai_rem + aj;
+            let a_j = arr.get_at(j);
+            let a_i_j = ai_rem + a_j;
             for k in j + 1..n {
-                let ak = unsafe { *arr.get_unchecked(k) };
-                let aijk = aij + ak;
-                if aijk < 0 {
+                let a_k = arr.get_at(k);
+                let a_i_j_k = a_i_j + a_k;
+                if a_i_j_k < 0 {
                     continue;
-                } else if aijk > 0 {
+                } else if a_i_j_k > 0 {
                     break;
                 } else {
-                    return (ai as u32) * (aj as u32) * (ak as u32);
+                    return (a_i as u32) * (a_j as u32) * (a_k as u32);
                 }
             }
         }
@@ -74,10 +89,10 @@ pub fn part2(s: &[i16]) -> u32 {
 
 #[test]
 fn test_day01_part1() {
-    assert_eq!(part1(&input()), 974304);
+    assert_eq!(part1(input()), 974304);
 }
 
 #[test]
 fn test_day01_part2() {
-    assert_eq!(part2(&input()), 236430480);
+    assert_eq!(part2(input()), 236430480);
 }
