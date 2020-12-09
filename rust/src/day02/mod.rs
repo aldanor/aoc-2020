@@ -1,7 +1,4 @@
-use core::hint::unreachable_unchecked;
-use core::slice::from_raw_parts;
-
-use memchr::memchr;
+use crate::utils::*;
 
 #[derive(Clone, Debug, Default)]
 pub struct Password<'a> {
@@ -11,47 +8,30 @@ pub struct Password<'a> {
     pub char: u8,
 }
 
-#[inline]
-unsafe fn parse_u8_superfast(s: &mut *const u8) -> u8 {
-    let d0 = (**s).wrapping_sub(b'0');
-    *s = s.add(1);
-    let d1 = (**s).wrapping_sub(b'0');
-    if d1 < 10 {
-        *s = s.add(1);
-        d0 * 10 + d1
-    } else {
-        d0
-    }
-}
-
 impl<'a> Password<'a> {
     #[inline]
-    pub unsafe fn parse_superfast(s: &mut &'a [u8]) -> Self {
-        let mut p = s.as_ptr();
-        let n1 = parse_u8_superfast(&mut p);
-        p = p.add(1);
-        let n2 = parse_u8_superfast(&mut p);
-        p = p.add(1);
-        let char = *p;
-        p = p.add(3);
-        let i = memchr(b'\n', from_raw_parts(p, 32)).unwrap_or_else(|| unreachable_unchecked());
-        let pass = from_raw_parts(p, i);
-        p = p.add(i + 1);
-        *s = from_raw_parts(p, s.len() - (p.offset_from(s.as_ptr()) as usize));
+    pub fn parse(s: &mut &'a [u8]) -> Self {
+        let n1 = parse_int_fast(s, 1, 2);
+        let n2 = parse_int_fast(s, 1, 2);
+        let char = s.get_first();
+        *s = s.advance(3);
+        let i = s.memchr(b'\n');
+        let pass = &s[..i];
+        *s = s.advance(i + 1);
         Self { pass, n1, n2, char }
     }
 }
 
+#[inline]
 pub fn input() -> &'static [u8] {
-    static INPUT: &[u8] = include_bytes!("input.txt");
-    INPUT
+    include_bytes!("input.txt")
 }
 
 #[inline]
 pub fn part1(mut s: &[u8]) -> u16 {
     let mut valid = 0u16;
     while s.len() > 1 {
-        let p = unsafe { Password::parse_superfast(&mut s) };
+        let p = Password::parse(&mut s);
         let n = p
             .pass
             .into_iter()
@@ -67,9 +47,9 @@ pub fn part1(mut s: &[u8]) -> u16 {
 pub fn part2(mut s: &[u8]) -> u16 {
     let mut valid = 0;
     while s.len() > 1 {
-        let p = unsafe { Password::parse_superfast(&mut s) };
-        let match1 = unsafe { *p.pass.get_unchecked((p.n1 - 1) as usize) == p.char };
-        let match2 = unsafe { *p.pass.get_unchecked((p.n2 - 1) as usize) == p.char };
+        let p = Password::parse(&mut s);
+        let match1 = p.pass.get_at((p.n1 - 1) as usize) == p.char;
+        let match2 = p.pass.get_at((p.n2 - 1) as usize) == p.char;
         valid += (match1 != match2) as u16;
     }
     valid

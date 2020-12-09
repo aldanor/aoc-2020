@@ -3,37 +3,18 @@ use memchr::Memchr2;
 use crate::utils::*;
 
 #[inline]
-fn check_year(s: &[u8], lo: u16, hi: u16) -> bool {
+fn check_year(mut s: &[u8], lo: u16, hi: u16) -> bool {
     s.len() == 4 && {
-        let d0 = s.get_digit_at(0);
-        let d1 = s.get_digit_at(1);
-        let d2 = s.get_digit_at(2);
-        let d3 = s.get_digit_at(3);
-        (d0 < 10 && d1 < 10 && d2 < 10 && d3 < 10) && {
-            let v = (d0 as u16) * 1000 + (d1 as u16) * 100 + (d2 as u16) * 10 + (d3 as u16);
-            v >= lo && v <= hi
-        }
+        let v = parse_int_fast::<u16>(&mut s, 4, 4);
+        v >= lo && v <= hi
     }
 }
 
 #[inline]
-fn check_height(s: &[u8], lo: u16, hi: u16) -> bool {
+fn check_height(mut s: &[u8], lo: u16, hi: u16) -> bool {
     s.len() >= 2 && {
-        let d0 = s.get_digit_at(0);
-        let d1 = s.get_digit_at(1);
-        let v = (d0 as u16) * 10 + (d1 as u16);
-        (d0 < 10 && d1 < 10)
-            && match s.len() {
-                2 => v >= lo && v <= hi,
-                3 => {
-                    let d2 = s.get_digit_at(2);
-                    (d2 < 10) && {
-                        let v = v * 10 + (d2 as u16);
-                        v >= lo && v <= hi
-                    }
-                }
-                _ => false,
-            }
+        let v = parse_int_fast::<u16>(&mut s, 2, 3);
+        v >= lo && v <= hi
     }
 }
 

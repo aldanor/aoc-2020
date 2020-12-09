@@ -55,29 +55,6 @@ impl Cmd {
     }
 }
 
-#[inline]
-fn parse_i16(s: &mut &[u8]) -> i16 {
-    let neg = s.get_first() == b'-';
-    *s = s.advance(1);
-    let mut d = s.get_digit() as i16;
-    *s = s.advance(1);
-    let c1 = s.get_first().wrapping_sub(b'\n');
-    if c1 != 0 {
-        d = d * 10 + (c1.wrapping_sub(b'0' - b'\n') as i16);
-        *s = s.advance(1);
-        let c2 = s.get_first().wrapping_sub(b'\n');
-        if c2 != 0 {
-            d = d * 10 + (c2.wrapping_sub(b'0' - b'\n') as i16);
-            *s = s.advance(1);
-        }
-    }
-    if neg {
-        -d
-    } else {
-        d
-    }
-}
-
 impl Cmd {
     #[inline]
     pub fn try_parse(s: &mut &[u8]) -> Option<Self> {
@@ -88,8 +65,12 @@ impl Cmd {
                 _ => Op::Nop,
             };
             *s = s.advance(4);
-            let arg = parse_i16(s);
+            let neg = s.get_first() == b'-';
             *s = s.advance(1);
+            let mut arg = parse_int_fast::<i16>(s, 1, 3);
+            if neg {
+                arg = -arg;
+            }
             Some(Cmd { op, arg })
         } else {
             None
@@ -100,9 +81,6 @@ impl Cmd {
 pub const MAX_CMDS: usize = 1024;
 
 const NULL: i16 = i16::MIN;
-
-#[derive(Debug, Clone, Copy)]
-pub enum CellState {}
 
 #[derive(Debug, Copy, Clone)]
 pub struct Runner {

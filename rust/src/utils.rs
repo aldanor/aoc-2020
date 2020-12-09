@@ -53,7 +53,7 @@ impl<T: Copy + PartialEq> SliceExt<T> for [T] {
 
     #[inline]
     fn advance(&self, n: usize) -> &Self {
-        unsafe { slice::from_raw_parts(self.as_ptr().add(n), self.len() - n) }
+        unsafe { slice::from_raw_parts(self.as_ptr().add(n), self.len().saturating_sub(n)) }
     }
 }
 
