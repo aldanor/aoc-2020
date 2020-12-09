@@ -1,13 +1,37 @@
 use core::hint::unreachable_unchecked;
+use core::ops::{Add, Mul};
 use core::slice;
 
 use memchr::memchr;
 
-pub trait SliceExt<T>
+#[inline(always)]
+pub fn parse_int_fast<T>(s: &mut &[u8], min_digits: usize, max_digits: usize) -> T
 where
-    T: Copy,
+    T: From<u8> + Add<Output = T> + Mul<Output = T>,
 {
+    let mut v = T::from(s.get_digit());
+    *s = s.advance(1);
+    for _ in 1..min_digits {
+        let d = s.get_digit();
+        *s = s.advance(1);
+        v = v * T::from(10u8) + T::from(d);
+    }
+    for _ in min_digits..max_digits {
+        let d = s.get_digit();
+        *s = s.advance(1);
+        if d < 10 {
+            v = v * T::from(10u8) + T::from(d);
+        } else {
+            return v;
+        }
+    }
+    *s = s.advance(1);
+    v
+}
+
+pub trait SliceExt<T: Copy> {
     fn get_at(&self, i: usize) -> T;
+    fn set_at(&mut self, i: usize, v: T);
     fn advance(&self, n: usize) -> &Self;
 
     #[inline]
@@ -20,6 +44,11 @@ impl<T: Copy + PartialEq> SliceExt<T> for [T] {
     #[inline]
     fn get_at(&self, i: usize) -> T {
         unsafe { *self.get_unchecked(i) }
+    }
+
+    #[inline]
+    fn set_at(&mut self, i: usize, v: T) {
+        unsafe { *self.get_unchecked_mut(i) = v };
     }
 
     #[inline]
