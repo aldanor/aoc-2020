@@ -1,5 +1,5 @@
 use core::hint::unreachable_unchecked;
-use core::ops::{Add, Mul};
+use core::ops::{Add, AddAssign, Mul};
 use core::slice;
 
 use memchr::memchr;
@@ -30,17 +30,29 @@ where
 }
 
 pub trait SliceExt<T: Copy> {
+    fn get_len(&self) -> usize;
     fn get_at(&self, i: usize) -> T;
     fn set_at(&mut self, i: usize, v: T);
     fn advance(&self, n: usize) -> &Self;
+    fn add_at(&mut self, i: usize, v: T);
 
     #[inline]
     fn get_first(&self) -> T {
         self.get_at(0)
     }
+
+    #[inline]
+    fn get_last(&self) -> T {
+        self.get_at(self.get_len() - 1)
+    }
 }
 
-impl<T: Copy + PartialEq> SliceExt<T> for [T] {
+impl<T: Copy + Add<Output = T> + AddAssign> SliceExt<T> for [T] {
+    #[inline]
+    fn get_len(&self) -> usize {
+        self.len()
+    }
+
     #[inline]
     fn get_at(&self, i: usize) -> T {
         unsafe { *self.get_unchecked(i) }
@@ -54,6 +66,11 @@ impl<T: Copy + PartialEq> SliceExt<T> for [T] {
     #[inline]
     fn advance(&self, n: usize) -> &Self {
         unsafe { slice::from_raw_parts(self.as_ptr().add(n), self.len().saturating_sub(n)) }
+    }
+
+    #[inline]
+    fn add_at(&mut self, i: usize, v: T) {
+        unsafe { *self.get_unchecked_mut(i) += v };
     }
 }
 
