@@ -9,6 +9,7 @@ arrayvec = "0.5"
 ctor = "0.1"
 memchr = "2.3"
 quickersort = "3.0"
+packed_simd_2 = "0.3"
 
 [profile.release]
 codegen-units = 1
