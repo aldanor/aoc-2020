@@ -24,4 +24,5 @@ fn main() {
     run_day!(day10);
     run_day!(day11);
     run_day!(day12);
+    run_day!(day13);
 }
