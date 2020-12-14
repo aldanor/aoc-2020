@@ -72,30 +72,71 @@ pub fn part1(s: &[u8]) -> u64 {
     map.values().sum()
 }
 
+#[derive(Copy, Clone, Debug)]
+enum Cell {
+    Empty,
+    Single(Mask, u64),
+    Multi,
+}
+
 #[inline]
-pub fn part2(mut s: &[u8]) -> u64 {
+pub fn part2(s: &[u8]) -> u64 {
+    const MASK_LO: u64 = 0x000000000000FFFF;
+    const MASK_HI: u64 = 0xFFFFFFFFFFFF0000;
+
     let mut map = Map::with_capacity_and_hasher(1 << 18, Default::default());
-    let mut mask = Mask::default();
-    let mut n_ones = 0;
+    let mut update_map = |mask: &Mask, value: u64, idx_lo: usize| {
+        let mask_hi = mask.mask & MASK_HI;
+        let addr = (idx_lo as u64) | (mask.value & MASK_HI);
+        let mut xor = mask_hi + 1;
+        for _ in 0..(1 << mask_hi.count_ones()) {
+            xor = (xor - 1) & mask_hi;
+            *map.entry(addr ^ xor).or_default() = value;
+        }
+    };
+
+    let mut mask_now = Mask::default();
+    let mut cells = [Cell::Empty; 65536];
+
     for instruction in parse_instructions(s) {
         match instruction {
-            Instruction::Mask(new_mask) => {
-                mask = new_mask;
-                n_ones = 1 << mask.mask.count_ones();
-            }
+            Instruction::Mask(mask_new) => mask_now = mask_new,
             Instruction::Write { addr, value } => {
-                let addr = addr | mask.value;
-                let mask = mask.mask;
-                let mut xor = mask + 1;
-                for _ in 0..n_ones {
-                    count += 1;
-                    xor = (xor - 1) & mask;
-                    *map.entry(addr ^ xor).or_default() = value;
+                let mask_lo = (mask_now.mask & MASK_LO) as u16;
+                let addr_lo = ((addr | mask_now.value) & MASK_LO) as u16;
+                let mut xor_lo = mask_lo + 1;
+                for _ in 0..(1 << mask_lo.count_ones()) {
+                    xor_lo = (xor_lo - 1) & mask_lo;
+                    let idx_lo = (addr_lo ^ xor_lo) as usize;
+                    cells[idx_lo] = match cells[idx_lo] {
+                        Cell::Empty => Cell::Single(mask_now, value),
+                        Cell::Single(mask_old, value_old) => {
+                            update_map(&mask_old, value_old, idx_lo);
+                            update_map(&mask_now, value, idx_lo);
+                            Cell::Multi
+                        }
+                        Cell::Multi => {
+                            update_map(&mask_now, value, idx_lo);
+                            Cell::Multi
+                        }
+                    };
                 }
             }
         }
     }
-    map.values().sum()
+
+    let sum_multi = map.values().sum::<u64>();
+    let sum_single = cells
+        .iter()
+        .filter_map(|cell| {
+            if let Cell::Single(ref mask, value) = cell {
+                Some(value * (1 << (mask.mask & MASK_HI).count_ones()))
+            } else {
+                None
+            }
+        })
+        .sum::<u64>();
+    sum_multi + sum_single
 }
 
 #[test]
