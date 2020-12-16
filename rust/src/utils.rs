@@ -32,6 +32,7 @@ where
 pub trait SliceExt<T: Copy> {
     fn get_len(&self) -> usize;
     fn get_at(&self, i: usize) -> T;
+    fn get_mut_at(&mut self, i: usize) -> &mut T;
     fn set_at(&mut self, i: usize, v: T);
     fn advance(&self, n: usize) -> &Self;
     fn add_at(&mut self, i: usize, v: T);
@@ -56,6 +57,11 @@ impl<T: Copy + Add<Output = T> + AddAssign> SliceExt<T> for [T] {
     #[inline]
     fn get_at(&self, i: usize) -> T {
         unsafe { *self.get_unchecked(i) }
+    }
+
+    #[inline]
+    fn get_mut_at(&mut self, i: usize) -> &mut T {
+        unsafe { self.get_unchecked_mut(i) }
     }
 
     #[inline]
