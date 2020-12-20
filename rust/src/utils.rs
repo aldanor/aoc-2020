@@ -5,7 +5,12 @@ use core::slice;
 use memchr::memchr;
 
 #[inline(always)]
-pub fn parse_int_fast<T>(s: &mut &[u8], min_digits: usize, max_digits: usize) -> T
+pub fn parse_int_fast_skip_custom<T>(
+    s: &mut &[u8],
+    min_digits: usize,
+    max_digits: usize,
+    skip: usize,
+) -> T
 where
     T: From<u8> + Add<Output = T> + Mul<Output = T>,
 {
@@ -18,15 +23,24 @@ where
     }
     for _ in min_digits..max_digits {
         let d = s.get_digit();
-        *s = s.advance(1);
         if d < 10 {
+            *s = s.advance(1);
             v = v * T::from(10u8) + T::from(d);
         } else {
+            *s = s.advance(skip);
             return v;
         }
     }
-    *s = s.advance(1);
+    *s = s.advance(skip);
     v
+}
+
+#[inline(always)]
+pub fn parse_int_fast<T>(s: &mut &[u8], min_digits: usize, max_digits: usize) -> T
+where
+    T: From<u8> + Add<Output = T> + Mul<Output = T>,
+{
+    parse_int_fast_skip_custom(s, min_digits, max_digits, 1)
 }
 
 pub trait SliceExt<T: Copy> {
