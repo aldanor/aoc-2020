@@ -11,6 +11,7 @@ memchr = "2.3"
 quickersort = "3.0"
 packed_simd_2 = "0.3"
 rustc-hash = "1.1"
+petgraph = "0.5"
 
 [profile.release]
 codegen-units = 1
