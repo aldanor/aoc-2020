@@ -1,4 +1,3 @@
-use std::num::NonZeroU8;
 use std::ops::Index;
 
 use crate::utils::*;
@@ -8,16 +7,17 @@ use arrayvec::ArrayVec;
 const MAX_RULES: usize = 256;
 
 type Id = u8;
-type Match = Option<NonZeroU8>;
+type Match<'a> = Option<&'a [u8]>;
 type CharMap = [u8; 256];
 
 #[derive(Debug, Copy, Clone)]
 enum Term {
+    AnyChar,
+    Pair(u8, u8),
     Prepend(Id, u8),
     Append(Id, u8),
     Concat(Id, Id),
     Char(u8),
-    Pair(u8, u8),
     Just(Id),
 }
 
@@ -94,7 +94,10 @@ fn parse_rule(s: &mut &[u8], map: &CharMap) -> (Id, Rule) {
         let (id1, id2) = parse_pair(s);
         let term2 = parse_term(id1, id2, map);
         *s = s.advance(1);
-        Rule::Either(term1, term2)
+        match (term1, term2) {
+            (Term::Char(a), Term::Char(b)) if a != b => Rule::Just(Term::AnyChar),
+            _ => Rule::Either(term1, term2),
+        }
     };
 
     (rule_id, rule)
@@ -138,51 +141,60 @@ fn parse_rules(s: &mut &[u8]) -> Rules {
     Rules(rules)
 }
 
-#[inline]
-fn match_len(n: impl Into<u8>) -> NonZeroU8 {
-    unsafe { NonZeroU8::new_unchecked(n.into()) }
-}
-
 impl Rules {
     #[inline]
-    fn match_char(&self, s: &[u8], c: u8) -> Match {
+    fn match_char<'a>(&self, s: &'a [u8], c: u8) -> Match<'a> {
         if s.get_first() == c {
-            Some(match_len(1))
+            Some(&s[1..])
         } else {
             None
         }
     }
 
     #[inline]
-    fn match_term(&self, s: &[u8], term: &Term) -> Match {
+    fn match_term<'a>(&self, s: &'a [u8], term: &Term, fixed: bool) -> Match<'a> {
         if s.is_empty() {
             return None;
         }
         match *term {
-            Term::Append(id, c) => self.match_rule(s, id).and_then(|n| {
-                self.match_char(&s[n.get() as usize..], c)
-                    .map(|_| match_len(n.get() + 1))
-            }),
+            Term::AnyChar => Some(&s[1..]),
+            Term::Pair(c1, c2) => {
+                if s.get_at(0) == c1 && s.get_at(1) == c2 {
+                    Some(&s[2..])
+                } else {
+                    None
+                }
+            }
+            Term::Append(id, c) => {
+                if !fixed {
+                    self.match_rule(s, id, fixed)
+                        .and_then(|s| self.match_char(s, c))
+                } else {
+                    if s.get_last() == c {
+                        self.match_rule(&s[..s.len() - 1], id, fixed)
+                    } else {
+                        None
+                    }
+                }
+            }
             Term::Prepend(id, c) => self
                 .match_char(s, c)
-                .and_then(|_| self.match_rule(&s[1..], id).map(|n| match_len(n.get() + 1))),
-            Term::Concat(a, b) => self.match_rule(s, a).and_then(|n1| {
-                self.match_rule(&s[n1.get() as usize..], b)
-                    .map(|n2| match_len(n1.get() + n2.get()))
-            }),
+                .and_then(|s| self.match_rule(s, id, fixed)),
+            Term::Concat(a, b) => self
+                .match_rule(s, a, false) // can't allow greedy match here (or we have to use len)
+                .and_then(|s| self.match_rule(s, b, fixed)),
             Term::Char(c) => self.match_char(s, c),
-            Term::Pair(c1, c2) => self
-                .match_char(s, c1)
-                .and_then(|_| self.match_char(&s[1..], c2).map(|_| match_len(2))),
-            Term::Just(id) => self.match_rule(s, id),
+            Term::Just(id) => self.match_rule(s, id, fixed),
         }
     }
 
     #[inline]
-    pub fn match_rule(&self, s: &[u8], id: Id) -> Match {
+    pub fn match_rule<'a>(&self, s: &'a [u8], id: Id, fixed_size: bool) -> Match<'a> {
         match self[id] {
-            Rule::Either(ref a, ref b) => self.match_term(s, a).or_else(|| self.match_term(s, b)),
-            Rule::Just(ref term) => self.match_term(s, term),
+            Rule::Either(ref a, ref b) => self
+                .match_term(s, a, fixed_size)
+                .or_else(|| self.match_term(s, b, fixed_size)),
+            Rule::Just(ref term) => self.match_term(s, term, fixed_size),
         }
     }
 }
@@ -209,15 +221,91 @@ pub fn input() -> &'static [u8] {
     include_bytes!("input.txt")
 }
 
+type PatternLengths = ArrayVec<[u8; 16]>;
+type PatternLengthsArray = ArrayVec<[PatternLengths; MAX_RULES]>;
+
+fn compute_pattern_lengths_for_term(
+    rules: &Rules,
+    term: &Term,
+    arr: &mut PatternLengthsArray,
+) -> PatternLengths {
+    let mut lengths = PatternLengths::new();
+    match *term {
+        Term::Just(id) => {
+            &update_pattern_lengths_for_rule(rules, id, arr);
+            for &n in &arr[id as usize] {
+                lengths.push(n);
+            }
+        }
+        Term::AnyChar | Term::Char(_) => lengths.push(1),
+        Term::Pair(_, _) => lengths.push(2),
+        Term::Prepend(id, _) | Term::Append(id, _) => {
+            update_pattern_lengths_for_rule(rules, id, arr);
+            for &n in &arr[id as usize] {
+                lengths.push(n + 1);
+            }
+        }
+        Term::Concat(id1, id2) => {
+            update_pattern_lengths_for_rule(rules, id1, arr);
+            update_pattern_lengths_for_rule(rules, id2, arr);
+            for n1 in &arr[id1 as usize] {
+                for n2 in &arr[id2 as usize] {
+                    lengths.push(n1 + n2);
+                }
+            }
+        }
+    }
+    lengths
+}
+
+fn update_pattern_lengths_for_rule(rules: &Rules, id: Id, arr: &mut PatternLengthsArray) {
+    if !arr[id as usize].is_empty() {
+        return;
+    }
+    arr[id as usize] = match rules[id].clone() {
+        Rule::Just(ref term) => compute_pattern_lengths_for_term(rules, term, arr),
+        Rule::Either(ref term1, ref term2) => {
+            let mut lengths = compute_pattern_lengths_for_term(rules, term1, arr);
+            for &n2 in &compute_pattern_lengths_for_term(rules, term2, arr) {
+                if !lengths.contains(&n2) {
+                    lengths.push(n2);
+                }
+            }
+            lengths
+        }
+    };
+}
+
+#[inline]
+fn compute_pattern_lengths(rules: &Rules) -> ArrayVec<[usize; MAX_RULES]> {
+    let mut counts = PatternLengthsArray::new();
+    for _ in 0..rules.0.len() {
+        counts.push(Default::default());
+    }
+    for i in 0..rules.0.len() {
+        update_pattern_lengths_for_rule(rules, i as _, &mut counts);
+    }
+    // NOTE: if patterns were of varying lengths, we could just disable greedy
+    // approach in parts 1/2 by setting fixed_size=false, it would still work
+    assert!(counts.iter().all(|c| c.len() == 1));
+    counts.into_iter().map(|c| c[0] as usize).collect()
+}
+
 #[inline]
 pub fn part1(mut s: &[u8]) -> u16 {
     let rules = parse_rules(&mut s);
+    let lengths = compute_pattern_lengths(&rules);
+    let root_len = lengths[0];
     parse_inputs(s)
         .map(|line| {
-            rules
-                .match_rule(line, 0)
-                .map(|n| n.get() == (line.len() as u8))
-                .unwrap_or(false) as u16
+            if line.len() != root_len {
+                0
+            } else {
+                rules
+                    .match_rule(line, 0, true)
+                    .map(|s| s.is_empty() as u16)
+                    .unwrap_or(0)
+            }
         })
         .sum()
 }
@@ -225,17 +313,21 @@ pub fn part1(mut s: &[u8]) -> u16 {
 #[inline]
 pub fn part2(mut s: &[u8]) -> u16 {
     let rules = parse_rules(&mut s);
+    let lengths = compute_pattern_lengths(&rules);
     parse_inputs(s)
         .map(|mut line| {
-            let mut n_42 = 0;
-            while let Some(n) = rules.match_rule(line, 42) {
-                n_42 += 1;
-                line = &line[n.get() as usize..];
-            }
-            let mut n_31 = 0;
-            while let Some(n) = rules.match_rule(line, 31) {
-                n_31 += 1;
-                line = &line[n.get() as usize..];
+            let (mut n_42, mut n_31) = (0, 0);
+            for (n, id) in &mut [(&mut n_42, 42), (&mut n_31, 31)] {
+                let len = lengths[*id as usize];
+                while !line.is_empty() {
+                    let s = rules.match_rule(&line[..len], *id as _, true);
+                    if s.map(|s| s.is_empty()).unwrap_or(false) {
+                        **n += 1;
+                        line = &line[len..];
+                    } else {
+                        break;
+                    }
+                }
             }
             (line.is_empty() && n_42 > n_31 && n_31 != 0) as u16
         })
