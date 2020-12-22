@@ -60,7 +60,7 @@ pub fn part1(s: &[u8]) -> usize {
 static RECURSE_MASKS: [U512; 64] = {
     let mut masks = [U512::default(); 64];
     for i in 0..64 {
-        masks[i] = (U512::from(1) << (6 * i)) - U512::from(1);
+        masks[i] = (U512::from(1) << (8 * i)) - U512::from(1);
     }
     masks
 };
@@ -84,7 +84,7 @@ impl FastDeck {
         let mut cards = Default::default();
         let mut len = 0;
         for &c in &deck {
-            cards = (cards << 6) | U512::from(c);
+            cards = (cards << 8) | U512::from(c);
             len += 1;
         }
         Self { cards, len }
@@ -92,7 +92,7 @@ impl FastDeck {
 
     #[inline]
     pub fn top(&self) -> Card {
-        (self.cards.low_u32() % 64) as _
+        (self.cards.low_u32() % 256) as _
     }
 
     #[inline]
@@ -103,13 +103,13 @@ impl FastDeck {
     #[inline]
     pub fn recurse(&self) -> Self {
         let len = self.top() as usize;
-        let cards = (self.cards >> 6) & get_recurse_mask(len);
+        let cards = (self.cards >> 8) & get_recurse_mask(len);
         Self { len, cards }
     }
 
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = Card> + '_ {
-        (0..self.len).map(move |i| ((self.cards >> i * 6).low_u32() % 64) as _)
+        (0..self.len).map(move |i| ((self.cards >> i * 8).low_u32() % 256) as _)
     }
 
     #[inline]
@@ -124,6 +124,18 @@ impl FastDeck {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 struct FastGame {
     decks: [FastDeck; 2],
+}
+
+#[inline(always)]
+fn shr8(x: &mut U512) {
+    // shift a U512 right by 8 bits without copying and ignore the last 64-bit chunk
+    x.0[0] = (x.0[0] >> 8) | (x.0[1] << 56);
+    x.0[1] = (x.0[1] >> 8) | (x.0[2] << 56);
+    x.0[2] = (x.0[2] >> 8) | (x.0[3] << 56);
+    x.0[3] = (x.0[3] >> 8) | (x.0[4] << 56);
+    x.0[4] = (x.0[4] >> 8) | (x.0[5] << 56);
+    x.0[5] = (x.0[5] >> 8) | (x.0[6] << 56);
+    x.0[6] >>= 8; // the highest u64 will always be 0
 }
 
 impl FastGame {
@@ -144,16 +156,16 @@ impl FastGame {
     #[inline]
     pub fn finish_round(&mut self, winner_is_1: bool) -> bool {
         let (winner, loser) = self.winner_loser(winner_is_1);
-
         let (winner_card, loser_card) = (winner.top(), loser.top());
-
-        let bottom = U512::from(((loser_card as u16) << 6) | (winner_card as u16));
-        winner.cards = (winner.cards >> 6) | (bottom << ((winner.len - 1) * 6));
+        shr8(&mut winner.cards);
+        unsafe {
+            let cards = winner.cards.0.as_mut_ptr() as *mut u8;
+            *cards.add(winner.len - 1) = winner_card;
+            *cards.add(winner.len) = loser_card;
+        }
+        shr8(&mut loser.cards);
         winner.len += 1;
-
-        loser.cards = loser.cards >> 6;
         loser.len -= 1;
-
         loser.len == 0
     }
 
@@ -169,9 +181,9 @@ impl FastGame {
 
     #[inline]
     fn play(&mut self) -> bool {
-        let mut history = FxHashSet::with_capacity_and_hasher(1 << 10, Default::default());
+        let mut history = FxHashSet::with_capacity_and_hasher(1 << 9, Default::default());
         loop {
-            if !history.insert(self.decks[0].cards ^ self.decks[1].cards) {
+            if !history.insert((self.decks[0].cards ^ self.decks[1].cards).0) {
                 return false;
             }
             let winner_is_1 = if self.can_recurse() {
