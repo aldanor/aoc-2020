@@ -68,8 +68,13 @@ static RECURSE_MASKS: [U512; 64] = {
 };
 
 #[inline]
-fn get_recurse_mask(len: usize) -> U512 {
-    unsafe { *RECURSE_MASKS.get_unchecked(len) }
+fn shr8_and_slice(mut x: U512, len: usize) -> U512 {
+    let mask = RECURSE_MASKS[len];
+    shr8(&mut x);
+    for i in 0..7 {
+        x.0[i] &= mask.0[i];
+    }
+    x
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -105,7 +110,7 @@ impl FastDeck {
     #[inline]
     pub fn recurse(&self) -> Self {
         let len = self.top() as usize;
-        let cards = (self.cards >> 8) & get_recurse_mask(len);
+        let cards = shr8_and_slice(self.cards, len);
         Self { len, cards }
     }
 
