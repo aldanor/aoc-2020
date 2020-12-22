@@ -2,7 +2,7 @@ use core::hint::unreachable_unchecked;
 use core::ops::{Add, AddAssign, Mul};
 use core::slice;
 
-use memchr::memchr;
+use memchr::{memchr, memchr2};
 
 #[inline(always)]
 pub fn parse_int_fast_skip_custom<T>(
@@ -96,6 +96,7 @@ impl<T: Copy + Add<Output = T> + AddAssign> SliceExt<T> for [T] {
 
 pub trait ByteSliceExt: SliceExt<u8> {
     fn memchr(&self, c: u8) -> usize;
+    fn memchr2(&self, c1: u8, c2: u8) -> usize;
     fn get_u16_ne(&self) -> u16;
 
     #[inline]
@@ -118,6 +119,11 @@ impl ByteSliceExt for [u8] {
     #[inline]
     fn memchr(&self, c: u8) -> usize {
         memchr(c, self).unwrap_or_else(|| unsafe { unreachable_unchecked() })
+    }
+
+    #[inline]
+    fn memchr2(&self, c1: u8, c2: u8) -> usize {
+        memchr2(c1, c2, self).unwrap_or_else(|| unsafe { unreachable_unchecked() })
     }
 
     #[inline]
