@@ -157,6 +157,18 @@ impl FastGame {
     }
 
     #[inline]
+    pub fn hash(&self) -> u64 {
+        let hash = |a, b| a ^ (b + (a << 6) + (b >> 2));
+        let mut h = 0;
+        for i in 0..7 {
+            // don't need the last number as it's always zero
+            h = hash(h, self.decks[0].cards.0[i]);
+            h = hash(h, self.decks[1].cards.0[i]);
+        }
+        h
+    }
+
+    #[inline]
     fn winner_loser(&mut self, winner_is_1: bool) -> (&mut FastDeck, &mut FastDeck) {
         let ptr = self.decks.as_mut_ptr();
         let winner = unsafe { &mut *ptr.add(winner_is_1 as _) };
@@ -202,7 +214,7 @@ impl FastGame {
         }
         let mut history = FxHashSet::with_capacity_and_hasher(1 << 9, Default::default());
         loop {
-            if !history.insert((self.decks[0].cards ^ self.decks[1].cards).0) {
+            if !history.insert(self.hash()) {
                 return false;
             }
             let winner_is_1 = if self.can_recurse() {
