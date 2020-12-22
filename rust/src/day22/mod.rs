@@ -1,6 +1,8 @@
 use std::collections::VecDeque;
+use std::slice;
 
 use bigint::U512;
+use packed_simd_2::u8x64;
 use rustc_hash::FxHashSet;
 
 use crate::utils::*;
@@ -119,6 +121,15 @@ impl FastDeck {
             .map(|(i, c)| (self.len - i) * (c as usize))
             .sum()
     }
+
+    #[inline]
+    pub fn max(&self) -> Card {
+        unsafe {
+            let ptr = self.cards.0.as_ptr() as *const Card;
+            let slice = slice::from_raw_parts(ptr, 64);
+            u8x64::from_slice_unaligned_unchecked(slice).max_element()
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -181,13 +192,21 @@ impl FastGame {
 
     #[inline]
     fn play(&mut self) -> bool {
+        self.play_internal(false)
+    }
+
+    #[inline]
+    fn play_internal(&mut self, short_circuit: bool) -> bool {
+        if self.decks[0].max() > self.decks[1].max() && short_circuit {
+            return false; // player 1 has the highest card so he inevitably wins
+        }
         let mut history = FxHashSet::with_capacity_and_hasher(1 << 9, Default::default());
         loop {
             if !history.insert((self.decks[0].cards ^ self.decks[1].cards).0) {
                 return false;
             }
             let winner_is_1 = if self.can_recurse() {
-                self.recurse().play()
+                self.recurse().play_internal(true)
             } else {
                 self.decks[1].top() > self.decks[0].top()
             };
