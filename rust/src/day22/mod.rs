@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 use std::slice;
 
-use bigint::U512;
 use packed_simd_2::u8x64;
 use rustc_hash::FxHashSet;
 
@@ -59,64 +58,137 @@ pub fn part1(s: &[u8]) -> usize {
 }
 
 #[ctor::ctor]
-static RECURSE_MASKS: [U512; 64] = {
-    let mut masks = [U512::default(); 64];
+static TRUNCATE_MASKS: [Deck512; 64] = {
+    let mut masks = [Deck512::default(); 64];
     for i in 0..64 {
-        masks[i] = (U512::from(1) << (8 * i)) - U512::from(1);
+        for j in 0..i {
+            masks[i].as_bytes_mut()[j] = 0xff;
+        }
     }
     masks
 };
 
 #[inline]
-fn shr8_and_slice(mut x: U512, len: usize) -> U512 {
-    let mask = RECURSE_MASKS[len];
-    shr8(&mut x);
-    for i in 0..7 {
-        x.0[i] &= mask.0[i];
+fn hash_combine(a: u64, b: u64) -> u64 {
+    a ^ (b + (a << 6) + (b >> 2))
+}
+
+// Raw container for storing decks; not explicitly aware of its size
+#[repr(align(512))] // align to 512-bit boundary for faster SIMD
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+struct Deck512([u64; 8]); // 8th byte is ignored
+
+impl Deck512 {
+    #[inline]
+    pub fn top(&self) -> Card {
+        (self.0[0] % 256) as _
     }
-    x
+
+    #[inline]
+    pub fn pop(&mut self) {
+        // remove top card
+        unsafe {
+            self.write_u8x64(shuffle!(
+                self.read_u8x64(),
+                [
+                    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+                    23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
+                    43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62,
+                    63, 0
+                ]
+            ));
+            self.as_bytes_mut()[63] = 0;
+        }
+    }
+
+    #[inline]
+    pub fn truncate(&mut self, len: usize) {
+        // leave only `len` cards
+        let mask = TRUNCATE_MASKS[len];
+        unsafe { self.write_u8x64(self.read_u8x64() & mask.read_u8x64()) };
+    }
+
+    #[inline]
+    pub fn hash(&self) -> u64 {
+        let mut hash = 0;
+        for i in 0..7 {
+            // don't need the last number as it's always zero
+            hash = hash_combine(hash, self.0[i]);
+        }
+        hash
+    }
+
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        // return all cards (includes trailing zeros)
+        unsafe { slice::from_raw_parts(self.0.as_ptr() as *const _, 64) }
+    }
+
+    #[inline]
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
+        // returns all cards (includes trailing zeros)
+        unsafe { slice::from_raw_parts_mut(self.0.as_mut_ptr() as *mut _, 64) }
+    }
+
+    #[inline]
+    pub unsafe fn read_u8x64(&self) -> u8x64 {
+        u8x64::from_slice_aligned_unchecked(self.as_bytes())
+    }
+
+    #[inline]
+    pub unsafe fn write_u8x64(&mut self, reg: u8x64) {
+        reg.write_to_slice_aligned_unchecked(self.as_bytes_mut())
+    }
+
+    #[inline]
+    pub fn max(&self) -> Card {
+        // find the max card
+        unsafe { self.read_u8x64().max_element() }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 struct FastDeck {
-    cards: U512,
+    cards: Deck512,
     len: usize,
 }
 
 impl FastDeck {
     #[inline]
     pub fn new(deck: impl Iterator<Item = Card>) -> Self {
-        let mut deck = deck.collect::<Vec<_>>();
-        deck.reverse();
-        let mut cards = Default::default();
-        let mut len = 0;
-        for &c in &deck {
-            cards = (cards << 8) | U512::from(c);
-            len += 1;
+        let deck = deck.collect::<Vec<_>>();
+        let mut cards = Deck512::default();
+        for (i, &c) in deck.iter().enumerate() {
+            cards.as_bytes_mut()[i] = c;
         }
+        let len = deck.len();
         Self { cards, len }
     }
 
     #[inline]
-    pub fn top(&self) -> Card {
-        (self.cards.low_u32() % 256) as _
+    pub fn pop(&mut self) -> Card {
+        let top = self.cards.top();
+        self.cards.pop();
+        self.len -= 1;
+        top
     }
 
     #[inline]
-    pub fn can_recurse(&self) -> bool {
-        self.len > (self.top() as usize)
+    pub fn can_recurse(&self, top: Card) -> bool {
+        (self.len as u8) >= top
     }
 
     #[inline]
-    pub fn recurse(&self) -> Self {
-        let len = self.top() as usize;
-        let cards = shr8_and_slice(self.cards, len);
-        Self { len, cards }
+    pub fn recurse(&self, top: Card) -> Self {
+        let mut deck = self.clone();
+        deck.len = top as _;
+        deck.cards.truncate(deck.len);
+        deck
     }
 
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = Card> + '_ {
-        (0..self.len).map(move |i| ((self.cards >> i * 8).low_u32() % 256) as _)
+        self.cards.as_bytes().iter().copied().take(self.len as _)
     }
 
     #[inline]
@@ -129,29 +201,29 @@ impl FastDeck {
 
     #[inline]
     pub fn max(&self) -> Card {
-        unsafe {
-            let ptr = self.cards.0.as_ptr() as *const Card;
-            let slice = slice::from_raw_parts(ptr, 64);
-            u8x64::from_slice_unaligned_unchecked(slice).max_element()
-        }
+        self.cards.max()
+    }
+
+    #[inline]
+    pub fn hash(&self) -> u64 {
+        self.cards.hash()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    #[inline]
+    pub fn push(&mut self, card: Card) {
+        self.cards.as_bytes_mut()[self.len] = card;
+        self.len += 1;
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 struct FastGame {
     decks: [FastDeck; 2],
-}
-
-#[inline(always)]
-fn shr8(x: &mut U512) {
-    // shift a U512 right by 8 bits without copying and ignore the last 64-bit chunk
-    x.0[0] = (x.0[0] >> 8) | (x.0[1] << 56);
-    x.0[1] = (x.0[1] >> 8) | (x.0[2] << 56);
-    x.0[2] = (x.0[2] >> 8) | (x.0[3] << 56);
-    x.0[3] = (x.0[3] >> 8) | (x.0[4] << 56);
-    x.0[4] = (x.0[4] >> 8) | (x.0[5] << 56);
-    x.0[5] = (x.0[5] >> 8) | (x.0[6] << 56);
-    x.0[6] >>= 8; // the highest u64 will always be 0
 }
 
 impl FastGame {
@@ -163,48 +235,32 @@ impl FastGame {
 
     #[inline]
     pub fn hash(&self) -> u64 {
-        let hash = |a, b| a ^ (b + (a << 6) + (b >> 2));
-        let mut h = 0;
-        for i in 0..7 {
-            // don't need the last number as it's always zero
-            h = hash(h, self.decks[0].cards.0[i]);
-            h = hash(h, self.decks[1].cards.0[i]);
-        }
-        h
+        hash_combine(self.decks[0].hash(), self.decks[1].hash())
     }
 
     #[inline]
-    fn winner_loser(&mut self, winner_is_1: bool) -> (&mut FastDeck, &mut FastDeck) {
-        let ptr = self.decks.as_mut_ptr();
-        let winner = unsafe { &mut *ptr.add(winner_is_1 as _) };
-        let loser = unsafe { &mut *ptr.add(!winner_is_1 as _) };
-        (winner, loser)
+    pub fn finish_round(&mut self, winner_is_1: bool, c0: Card, c1: Card) -> bool {
+        let winner = &mut self.decks[winner_is_1 as usize];
+        let cards = [c0, c1];
+        winner.push(cards[winner_is_1 as usize]);
+        winner.push(cards[!winner_is_1 as usize]);
+        let loser = &self.decks[!winner_is_1 as usize];
+        loser.is_empty()
     }
 
     #[inline]
-    pub fn finish_round(&mut self, winner_is_1: bool) -> bool {
-        let (winner, loser) = self.winner_loser(winner_is_1);
-        let (winner_card, loser_card) = (winner.top(), loser.top());
-        shr8(&mut winner.cards);
-        unsafe {
-            let cards = winner.cards.0.as_mut_ptr() as *mut u8;
-            *cards.add(winner.len - 1) = winner_card;
-            *cards.add(winner.len) = loser_card;
-        }
-        shr8(&mut loser.cards);
-        winner.len += 1;
-        loser.len -= 1;
-        loser.len == 0
+    pub fn pop(&mut self) -> (Card, Card) {
+        (self.decks[0].pop(), self.decks[1].pop())
     }
 
     #[inline]
-    pub fn can_recurse(&self) -> bool {
-        self.decks[0].can_recurse() && self.decks[1].can_recurse()
+    pub fn can_recurse(&self, c0: Card, c1: Card) -> bool {
+        self.decks[0].can_recurse(c0) && self.decks[1].can_recurse(c1)
     }
 
     #[inline]
-    fn recurse(&self) -> Self {
-        Self::new(self.decks[0].recurse(), self.decks[1].recurse())
+    fn recurse(&self, c0: Card, c1: Card) -> Self {
+        Self::new(self.decks[0].recurse(c0), self.decks[1].recurse(c1))
     }
 
     #[inline]
@@ -215,20 +271,22 @@ impl FastGame {
     #[inline]
     fn play_internal(&mut self, short_circuit: bool) -> bool {
         if self.decks[0].max() > self.decks[1].max() && short_circuit {
-            return false; // player 1 has the highest card so he inevitably wins
+            return false; // player 0 has the highest card so he inevitably wins
         }
         let mut history = FxHashSet::with_capacity_and_hasher(1 << 9, Default::default());
         loop {
-            if !history.insert(self.hash()) {
-                return false;
-            }
-            let winner_is_1 = if self.can_recurse() {
-                self.recurse().play_internal(true)
+            let hash = self.hash();
+            let (c0, c1) = self.pop();
+            let winner_is_1 = if self.can_recurse(c0, c1) {
+                self.recurse(c0, c1).play_internal(true)
             } else {
-                self.decks[1].top() > self.decks[0].top()
+                c1 > c0
             };
-            if self.finish_round(winner_is_1) {
+            if self.finish_round(winner_is_1, c0, c1) {
                 return winner_is_1;
+            }
+            if !history.insert(hash) {
+                return false;
             }
         }
     }
