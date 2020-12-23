@@ -70,7 +70,7 @@ static TRUNCATE_MASKS: [Deck512; 64] = {
 
 #[inline]
 fn hash_combine(a: u64, b: u64) -> u64 {
-    a ^ (b + (a << 6) + (b >> 2))
+    a ^ (b.wrapping_add(a << 6).wrapping_add(b >> 2))
 }
 
 // Raw container for storing decks; not explicitly aware of its size
